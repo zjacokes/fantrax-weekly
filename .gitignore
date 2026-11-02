@@ -219,3 +219,5 @@ __marimo__/
 # Streamlit
 .streamlit/secrets.toml
 .DS_Store
+probe_output.json
+probe_raw.json

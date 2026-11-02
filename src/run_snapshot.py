@@ -21,12 +21,15 @@ from pathlib import Path
 
 import requests
 
+from fantrax_internal import export_internal
 from fantrax_snapshot import export_snapshot
 
 LEAGUE_ID = "4hdci1kmmqx2i3l2"
 MY_TEAM_NAME = "Hornets"
 MY_TEAM_ID = "j9zufumqmqx2i3lu"
-OUTPUT_DIR = Path(__file__).resolve().parent.parent / "data" / "snapshots"
+DATA_DIR = Path(__file__).resolve().parent.parent / "data"
+OUTPUT_DIR = DATA_DIR / "snapshots"
+INTERNAL_DIR = DATA_DIR / "internal"
 
 LOOKBACK = timedelta(hours=12)
 COMPLETE_IF_ENDS_WITHIN = timedelta(hours=24)
@@ -65,6 +68,14 @@ def main():
         matchup_period=period,
         context={"target_period": period, "period_complete": complete},
         output_dir=OUTPUT_DIR,
+    )
+
+    # Logged-in extras (transactions + player Scores). Never fails the run:
+    # if the cookie is missing or expired, the file records why and we move on.
+    export_internal(
+        LEAGUE_ID,
+        output_dir=INTERNAL_DIR,
+        context={"target_period": period, "period_complete": complete},
     )
 
 

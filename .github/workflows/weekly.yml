@@ -1,3 +1,4 @@
+# Save as .github/workflows/weekly.yml
 name: Weekly snapshot
 
 on:
@@ -29,6 +30,10 @@ jobs:
       - run: pip install -r requirements.txt
 
       - name: Take snapshot
+        env:
+          # Browser cookie for the logged-in extras. If it is missing or expired,
+          # the run still succeeds and the page says the extras are unavailable.
+          FANTRAX_COOKIE: ${{ secrets.FANTRAX_COOKIE }}
         run: python src/run_snapshot.py
 
       - name: Build page
@@ -38,7 +43,7 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898283+github-actions[bot]@users.noreply.github.com"
-          git add data/snapshots docs
+          git add data/snapshots data/internal docs
           git diff --cached --quiet && exit 0
           git commit -m "Weekly snapshot $(date -u +%Y-%m-%d)"
           # If main moved while this job ran (e.g. you pushed code), replay the

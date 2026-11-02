@@ -8,10 +8,12 @@ No LLM yet: this is the plain-data page the commentary will later sit on top of.
 
 import html
 import json
+from datetime import datetime, timedelta
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 SNAPSHOT_DIR = ROOT / "data" / "snapshots"
+INTERNAL_DIR = ROOT / "data" / "internal"
 OUT = ROOT / "docs" / "index.html"
 
 STATUS_ORDER = {"ACTIVE": 0, "RESERVE": 1, "INJURED_RESERVE": 2, "MINORS": 3}
@@ -33,6 +35,7 @@ table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nu
 th, td { text-align: left; padding: 6px 10px; border-bottom: 1px solid var(--line); white-space: nowrap; }
 th { color: var(--muted); font-weight: 600; font-size: .8rem; text-transform: uppercase; letter-spacing: .03em; }
 tr.mine td { background: var(--mine); font-weight: 600; }
+.notice { padding: 8px 12px; border: 1px solid var(--line); border-radius: 6px; color: var(--muted); }
 """
 
 
@@ -51,6 +54,78 @@ def table(headers, rows, highlight=None):
 
 def wlt(side):
     return f'{side.get("categoryWins", 0):.0f}-{side.get("categoryLosses", 0):.0f}-{side.get("categoryTies", 0):.0f}'
+
+
+def load_internal():
+    """Newest and previous internal-extras files (either may be None)."""
+    files = sorted(INTERNAL_DIR.glob("fantrax_internal_*.json"))
+    load = lambda f: json.loads(f.read_text(encoding="utf-8"))
+    latest = load(files[-1]) if files else None
+    previous = None
+    for f in reversed(files[:-1]):  # newest earlier file that actually has scores
+        data = load(f)
+        if data.get("player_scores"):
+            previous = data
+            break
+    return latest, previous
+
+
+def period_window(league_info, number):
+    fmt = "%Y-%m-%dT%H:%M:%S.%f%z"
+    for p in league_info.get("scoringPeriods", []):
+        if p["number"] == number:
+            return datetime.strptime(p["startDate"], fmt), datetime.strptime(p["endDate"], fmt)
+    return None
+
+
+def extras_sections(snap, mine):
+    latest, previous = load_internal()
+    if not latest:
+        return '<p class="notice">Transactions and player Scores not collected yet.</p>'
+    if latest["status"].get("auth") != "ok":
+        return (f'<p class="notice">Transactions and player Scores unavailable this week '
+                f'(Fantrax login: {e(latest["status"].get("auth"))}).</p>')
+    parts = []
+
+    tx = latest.get("transactions") or []
+    window = period_window(snap.get("raw", {}).get("league_info", {}),
+                           snap.get("context", {}).get("target_period"))
+    if window:
+        start, end = window
+        in_week = lambda t: t["processed_utc"] and start <= datetime.fromisoformat(t["processed_utc"]) <= end
+        label = "this scoring period"
+    else:
+        cutoff = datetime.fromisoformat(latest["exported_utc"]) - timedelta(days=7)
+        in_week = lambda t: t["processed_utc"] and datetime.fromisoformat(t["processed_utc"]) >= cutoff
+        label = "the last 7 days"
+    claims = sorted((t for t in tx if t["type"] == "CLAIM" and in_week(t)),
+                    key=lambda t: -(t["bid"] or 0))
+    drops_by_set = {t["tx_set_id"]: t["player_name"] for t in tx if t["type"] == "DROP"}
+    parts.append(f"<h2>Waiver claims, {label}</h2>")
+    parts.append(table(
+        ["Team", "Added", "Bid", "Dropped", "Type"],
+        [(t["team_name"], t["player_name"], f'${t["bid"]:.0f}' if t["bid"] is not None else "",
+          drops_by_set.get(t["tx_set_id"], ""), {"WW": "Waivers", "FA": "Free agent"}.get(t["claim_type"], t["claim_type"] or ""))
+         for t in claims],
+        highlight=lambda r: r[0] == mine,
+    ) if claims else '<p class="notice">No claims.</p>')
+
+    scores = {p["player_id"]: p for p in latest.get("player_scores") or []}
+    before = {p["player_id"]: p["score"] for p in (previous or {}).get("player_scores") or []}
+    my_ids = [p["player_id"] for p in snap.get("derived", {}).get("rosters", [])
+              if p["fantasy_team_name"] == mine]
+    rows = []
+    for pid in my_ids:
+        p = scores.get(pid)
+        if not p or p["score"] is None:
+            continue
+        delta = p["score"] - before[pid] if before.get(pid) is not None else None
+        rows.append((p["player_name"], f'{p["score"]:.1f}',
+                     "" if delta is None else f"{delta:+.1f}", f'{p["stats"]["PTS"] or 0:.1f}'))
+    rows.sort(key=lambda r: -float(r[1]))
+    parts.append(f"<h2>{e(mine)} player Scores (season to date)</h2>")
+    parts.append(table(["Player", "Score", "Change vs last week", "PTS/G"], rows))
+    return "\n".join(parts)
 
 
 def main():
@@ -116,6 +191,8 @@ def main():
 
   <h2>{e(mine or "My team")} roster</h2>
   {roster}
+
+  {extras_sections(snap, mine)}
 </main>
 </body>
 </html>
