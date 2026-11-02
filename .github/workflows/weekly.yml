@@ -16,12 +16,12 @@ concurrency:
 
 jobs:
   snapshot:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04   # pinned; avoids surprise image migrations mid-season
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
           cache: pip
@@ -39,5 +39,10 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898283+github-actions[bot]@users.noreply.github.com"
           git add data/snapshots docs
-          git diff --cached --quiet || git commit -m "Weekly snapshot $(date -u +%Y-%m-%d)"
+          git diff --cached --quiet && exit 0
+          git commit -m "Weekly snapshot $(date -u +%Y-%m-%d)"
+          # If main moved while this job ran (e.g. you pushed code), replay the
+          # bot's commit on top. On a conflict in generated files, keep the bot's copy.
+          git pull --rebase -X theirs origin main
           git push
+
