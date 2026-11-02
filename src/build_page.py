@@ -111,7 +111,7 @@ def main():
   <h2>Standings</h2>
   {standings}
 
-  <h2>Matchups: scoring period {e(scores.get("period", "?"))}</h2>
+  <h2>Matchups: scoring period {e(scores.get("period", "?"))}{"" if snap.get("context", {}).get("period_complete", True) else " (in progress)"}</h2>
   {matchups}
 
   <h2>{e(mine or "My team")} roster</h2>
