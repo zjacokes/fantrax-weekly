@@ -1,0 +1,12 @@
+{
+ "exported_utc": "2026-11-24T01:43:54.068325+00:00",
+ "context": {
+  "target_period": 5,
+  "period_complete": true
+ },
+ "status": {
+  "auth": "no_cookie"
+ },
+ "transactions": null,
+ "player_scores": null
+}
